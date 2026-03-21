@@ -4,9 +4,14 @@ Nexus AI is a highly opinionated, brutally honest AI Code Assistant designed to 
 
 ## 🚀 Features
 - **Cinematic 3D UI**: Built with Framer Motion, Tailwind CSS, and advanced CSS glassmorphism for a deeply engaging, physical developer experience.
+- **Multi-File Drag & Drop Context**: Seamlessly drag and drop multiple source files (like `.jsx`, `.py`, or `.css`) directly onto the application UI to instantly extract their content and feed the AI deep architectural context.
+- **Side-by-Side Visual Diff Viewer**: Toggle button strictly integrated with `react-diff-viewer-continued`, empowering you to instantly cross-reference the AI's generated code against your original prompt.
+- **Conversational Memory**: The Express backend inherently parses and maps your complete chat context array to the OpenRouter API. You can ask contextual follow-up questions referencing previous messages!
+- **LocalStorage Persistence**: Complete chat-state continuity natively saved inside your browser. Refreshing or accidentally closing the tab will perfectly restore your conversation timeline.
+- **Dynamic Syntax Auto-Detection**: The system prompt forces AI models to declare semantic language tokens, allowing the `SyntaxHighlighter` to contextually colorize JS, Python, HTML, Rust, and more.
+- **One-Click Code Extraction**: Highly polished "Copy Code" button baked into the generated blocks that hooks `navigator.clipboard`.
 - **Strict Code Evaluation**: Identifies bugs, architectural flaws, and performance bottlenecks, returning explanations via beautiful Lucide-React alerts.
-- **Syntax Highlighting**: Natively renders refactored blocks via `react-syntax-highlighter` using a sleek `vscDarkPlus` theme.
-- **Secure Architecture**: A Node.js/Express backend proxy guarantees that your precious API keys are never exposed in the browser.
+- **Secure Architecture**: A Node.js/Express backend proxy validates input and absolutely guarantees your API keys are never leaked to the browser bundle.
 
 ## 🛠️ Technology Stack
 - **Frontend**: React 19, Vite, Tailwind CSS (v3 with PostCSS), Framer Motion, and Lucide React icons.
@@ -55,3 +60,5 @@ npm run dev:all
 The application will now be running on your local machine, typically at `http://localhost:5173`.
 
 ![alt text](image.png)
+![alt text](image-1.png)
+![alt text](image-2.png)
