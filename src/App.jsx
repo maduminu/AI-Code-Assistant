@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Sparkles, Code2, AlertTriangle, CheckCircle, RefreshCw, Send, MessageSquare, Plus, Menu } from 'lucide-react';
+import ReactDiffViewer from 'react-diff-viewer-continued';
+import { Play, Sparkles, Code2, AlertTriangle, CheckCircle, RefreshCw, Send, MessageSquare, Plus, Menu, Copy, Check, FileCode2, SplitSquareHorizontal, Paperclip } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -7,10 +8,84 @@ import './index.css';
 
 function App() {
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => {
+    const saved = localStorage.getItem('nexus_ai_history');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [isLoading, setIsLoading] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [conversationId, setConversationId] = useState(() => {
+    const saved = localStorage.getItem('nexus_ai_conversation_id');
+    if (saved) return saved;
+    const newId = crypto.randomUUID();
+    localStorage.setItem('nexus_ai_conversation_id', newId);
+    return newId;
+  });
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [copiedIndex, setCopiedIndex] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('nexus_ai_history', JSON.stringify(messages));
+  }, [messages]);
+
+  const handleCopy = (code, idx) => {
+    navigator.clipboard.writeText(code);
+    setCopiedIndex(idx);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const toggleDiff = (idx) => {
+    setMessages(prev => prev.map((m, i) => i === idx ? { ...m, showDiff: !m.showDiff } : m));
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const processFiles = async (files) => {
+    let combinedContent = "";
+    for (const file of files) {
+      if (file.type.startsWith('text/') || file.name.match(/\.(js|jsx|ts|tsx|css|html|json|md|py|java|c|cpp|h|hpp)$/i)) {
+        const text = await file.text();
+        combinedContent += `\n\n// --- File: ${file.name} ---\n${text}`;
+      }
+    }
+    
+    if (combinedContent) {
+      setInput((prev) => prev + combinedContent);
+    }
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    await processFiles(files);
+  };
+
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      await processFiles(files);
+    }
+    // Reset input so the same file can be selected again
+    e.target.value = '';
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -24,7 +99,8 @@ function App() {
     if (!input.trim() || isLoading) return;
     
     const userMessage = { role: 'user', content: input };
-    setMessages(prev => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
     setInput('');
     setIsLoading(true);
 
@@ -34,7 +110,10 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ code: input }),
+        body: JSON.stringify({ 
+          messages: newMessages,
+          conversationId: conversationId 
+        }),
       });
 
       let data;
@@ -51,6 +130,7 @@ function App() {
       setMessages(prev => [...prev, {
         role: 'ai',
         optimizedCode: data.optimizedCode || 'No optimized code returned.',
+        language: data.language || 'javascript',
         analysis: data.analysis || []
       }]);
     } catch (error) {
@@ -65,7 +145,29 @@ function App() {
   };
 
   return (
-    <div className="h-screen w-full flex overflow-hidden selection:bg-indigo-500/30 font-sans relative">
+    <div 
+      className="h-screen w-full flex overflow-hidden selection:bg-indigo-500/30 font-sans relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      
+      {/* File Drop Overlay */}
+      <AnimatePresence>
+        {isDragging && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-indigo-950/60 backdrop-blur-md flex items-center justify-center border-4 border-indigo-500 border-dashed m-4 rounded-[2.5rem] pointer-events-none"
+          >
+            <div className="bg-black/80 px-10 py-8 rounded-3xl flex flex-col items-center gap-6 shadow-2xl border border-indigo-500/30">
+              <FileCode2 className="w-20 h-20 text-indigo-400 animate-bounce" />
+              <h2 className="text-3xl font-extrabold text-white tracking-wide drop-shadow-lg">Drop files to add context</h2>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* Stunning Ambient Background */}
       <div className="fixed inset-0 pointer-events-none z-0 bg-[#070709] overflow-hidden">
@@ -90,7 +192,20 @@ function App() {
         <div className="absolute inset-0 bg-[url('https://transparenttextures.com/patterns/cubes.png')] opacity-[0.03] mix-blend-overlay" />
       </div>
 
-      {/* Sidebar (Desktop) */}
+      {/* Sidebar Overlay (Mobile) */}
+      <AnimatePresence>
+        {windowWidth <= 1024 && isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarOpen(false)}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar */}
       <AnimatePresence>
         {isSidebarOpen && (
           <motion.div 
@@ -98,7 +213,9 @@ function App() {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -300, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="w-72 h-full z-20 flex flex-col p-5 shrink-0 glass-panel border-r"
+            className={`h-full z-50 flex flex-col p-5 glass-panel border-r \${
+              windowWidth <= 1024 ? 'fixed w-72' : 'w-72 shrink-0 relative'
+            }`}
           >
             {/* Logo Area */}
             <div className="flex items-center gap-4 mb-8">
@@ -112,7 +229,7 @@ function App() {
             </div>
 
             <button 
-              onClick={() => setMessages([])}
+              onClick={() => { setMessages([]); localStorage.removeItem('nexus_ai_history'); }}
               className="glass-button group flex items-center justify-center gap-2 w-full p-3.5 rounded-2xl text-white font-medium mb-8"
             >
               <Plus className="w-4 h-4 text-indigo-300 group-hover:rotate-90 transition-transform duration-300" />
@@ -144,24 +261,26 @@ function App() {
       </AnimatePresence>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col h-full relative z-10 transition-all duration-300">
+      <div className="flex-1 flex flex-col h-full relative z-10 transition-all duration-300 min-w-0 overflow-hidden">
         
         {/* Header */}
-        <header className="h-16 flex items-center justify-between px-6 bg-transparent border-b border-white/5 backdrop-blur-md">
+        <header className="h-16 flex items-center justify-between px-4 md:px-6 bg-transparent border-b border-white/5 backdrop-blur-md">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-colors glass-button"
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/30 border border-white/10 shadow-inner text-xs font-semibold text-indigo-300">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" /> Current Model : Stepfun 3.5 Flash
+          <div className="flex items-center gap-2 px-3 md:px-4 py-1.5 rounded-full bg-black/30 border border-white/10 shadow-inner text-[10px] md:text-xs font-semibold text-indigo-300">
+            <Sparkles className="w-3 md:w-3.5 h-3 md:h-3.5 text-purple-400" /> 
+            <span className="hidden sm:inline">Current Model : Stepfun 3.5 Flash</span>
+            <span className="sm:hidden text-[9px]">Stepfun 3.5</span>
           </div>
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar scroll-smooth">
-          <div className="max-w-4xl mx-auto space-y-8 pb-32">
+        <div className="flex-1 overflow-y-auto p-2 md:p-8 custom-scrollbar scroll-smooth">
+          <div className="max-w-4xl mx-auto space-y-6 md:space-y-8 pb-32">
             
             {messages.length === 0 && (
               <motion.div 
@@ -192,14 +311,14 @@ function App() {
                   initial={{ opacity: 0, y: 20, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ type: "spring", stiffness: 200, damping: 20 }}
-                  className={`flex w-full \${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   {msg.role === 'user' ? (
-                    <div className="max-w-[80%] md:max-w-[70%] text-sm rounded-3xl rounded-tr-md p-5 bubble-user text-white shadow-2xl">
+                    <div className="max-w-[95%] md:max-w-[70%] text-sm rounded-3xl rounded-tr-md p-3 md:p-5 bubble-user text-white shadow-2xl overflow-hidden">
                       <pre className="font-mono whitespace-pre-wrap">{msg.content}</pre>
                     </div>
                   ) : (
-                    <div className="max-w-full w-full lg:max-w-[90%] text-sm rounded-3xl rounded-tl-md p-6 lg:p-8 bubble-ai text-slate-200 shadow-2xl">
+                    <div className="max-w-full w-full lg:max-w-[90%] text-sm rounded-3xl rounded-tl-md p-3 md:p-6 lg:p-8 bubble-ai text-slate-200 shadow-2xl overflow-hidden">
                       
                       {msg.error ? (
                          <div className="flex items-center gap-3 text-rose-300 bg-rose-500/10 p-5 rounded-2xl border border-rose-500/30 shadow-inner">
@@ -210,12 +329,12 @@ function App() {
                         <div className="space-y-8">
                           {/* Analysis Section */}
                           {msg.analysis && msg.analysis.length > 0 && (
-                            <div className="space-y-4">
+                            <div className="space-y-4 overflow-x-auto custom-scrollbar pb-2">
                               <h3 className="text-white font-bold flex items-center gap-2 text-base tracking-wide uppercase">
                                 <Sparkles className="w-5 h-5 text-purple-400" />
                                 Analysis Insights
                               </h3>
-                              <div className="grid gap-3">
+                              <div className="grid gap-3 min-w-max md:min-w-0">
                                 {msg.analysis.map((item, i) => (
                                   <div key={i} className="flex gap-4 items-start p-4 rounded-2xl bg-black/40 border border-white/5 shadow-inner transition-colors hover:bg-black/50">
                                     {item.type === 'warning' ? (
@@ -236,23 +355,64 @@ function App() {
                           {msg.optimizedCode && (
                             <div className="overflow-hidden rounded-2xl border border-white/10 shadow-2xl relative bg-[#1e1e1e]">
                                <div className="absolute top-0 left-0 w-full h-12 bg-black/60 border-b border-white/10 flex items-center justify-between px-5 z-10 backdrop-blur-md">
-                                 <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-widest">Refactored Output</span>
-                                 <div className="flex gap-2">
+                                 <div className="flex gap-2 items-center">
                                    <div className="w-3.5 h-3.5 rounded-full bg-[#ff5f56] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)]" />
                                    <div className="w-3.5 h-3.5 rounded-full bg-[#ffbd2e] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)]" />
                                    <div className="w-3.5 h-3.5 rounded-full bg-[#27c93f] shadow-[inset_0_1px_1px_rgba(255,255,255,0.4)]" />
                                  </div>
+                                 
+                                 <div className="flex items-center gap-1 sm:gap-2">
+                                   <button 
+                                     onClick={() => toggleDiff(idx)}
+                                     className={`flex items-center gap-1.5 p-1.5 rounded-lg hover:bg-white/10 transition-all text-[10px] sm:text-xs font-mono font-bold tracking-widest uppercase group ${msg.showDiff ? 'text-indigo-400 bg-white/5' : 'text-slate-400'}`}
+                                   >
+                                     <SplitSquareHorizontal className="w-4 h-4" /> <span className="hidden sm:inline">{msg.showDiff ? 'Code View' : 'Diff View'}</span>
+                                   </button>
+                                   
+                                   <button 
+                                     onClick={() => handleCopy(msg.optimizedCode, idx)}
+                                     className="flex items-center gap-1.5 p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-all text-[10px] sm:text-xs font-mono font-bold tracking-widest uppercase group"
+                                    >
+                                   {copiedIndex === idx ? (
+                                      <><Check className="w-4 h-4 text-emerald-400" /> Copied</>
+                                   ) : (
+                                      <><Copy className="w-4 h-4 group-hover:scale-110 transition-transform" /> Copy Code</>
+                                   )}
+                                 </button>
+                                 </div>
                                </div>
                                <div className="pt-12">
-                                <SyntaxHighlighter
-                                  language="javascript"
-                                  style={vscDarkPlus}
-                                  customStyle={{ margin: 0, padding: '1.5rem', background: 'transparent' }}
-                                  wrapLines={true}
-                                  showLineNumbers={true}
-                                >
-                                  {msg.optimizedCode}
-                                </SyntaxHighlighter>
+                                {msg.showDiff ? (
+                                  <div className="rounded-b-2xl overflow-x-auto bg-[#1e1e1e]/50 backdrop-blur-sm text-sm custom-scrollbar">
+                                    <div className="min-w-max md:min-w-full">
+                                      <ReactDiffViewer 
+                                        oldValue={messages[idx - 1]?.content || ''} 
+                                        newValue={msg.optimizedCode} 
+                                        splitView={windowWidth >= 768} 
+                                        useDarkTheme={true} 
+                                        styles={{
+                                          variables: { 
+                                            dark: { diffViewerBackground: 'transparent' } 
+                                          },
+                                          contentText: {
+                                            wordBreak: 'normal',
+                                            whiteSpace: 'pre'
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <SyntaxHighlighter
+                                    language={msg.language || 'javascript'}
+                                    style={vscDarkPlus}
+                                    customStyle={{ margin: 0, padding: '1.5rem', background: 'transparent' }}
+                                    wrapLines={false}
+                                    showLineNumbers={true}
+                                  >
+                                    {msg.optimizedCode}
+                                  </SyntaxHighlighter>
+                                )}
                               </div>
                             </div>
                           )}
@@ -282,9 +442,24 @@ function App() {
         </div>
 
         {/* Floating Input Area */}
-        <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-[#050505] via-[#050505]/90 to-transparent pt-20 pb-8 px-4 md:px-10 z-20">
-          <div className="max-w-4xl mx-auto relative">
+        <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-[#050505] via-[#050505]/90 to-transparent pt-20 pb-8 px-2 md:px-10 z-20">
+          <div className="max-w-4xl mx-auto relative px-2 md:px-0">
             <div className="floating-input rounded-3xl p-2.5 md:p-3 flex items-end gap-3 transition-all duration-300 focus-within:shadow-[0_0_50px_rgba(99,102,241,0.2)] focus-within:border-indigo-500/50">
+              <input 
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+                multiple
+                className="hidden"
+                accept=".js,.jsx,.ts,.tsx,.css,.html,.json,.md,.py,.java,.c,.cpp,.h,.hpp"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="p-3 md:p-4 rounded-2xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all duration-300 shrink-0"
+                title="Attach Files"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

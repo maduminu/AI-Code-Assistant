@@ -1,0 +1,29 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment Secrets (CRITICAL)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Databases (PRIVATE HISTORY)
+frontend/backend/*.db
+frontend/backend/*.sqlite
+*.db
+*.sqlite
+
+# Build Files
+dist/
+build/
+
+# Mac System Files
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
